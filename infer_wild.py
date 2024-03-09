@@ -16,7 +16,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/pose3d/MB_ft_h36m_global_lite.yaml", help="Path to the config file.")
     parser.add_argument('-e', '--evaluate', default='checkpoint/pose3d/FT_MB_lite_MB_ft_h36m_global_lite/best_epoch.bin', type=str, metavar='FILENAME', help='checkpoint to evaluate (file name)')
-    parser.add_argument('-j', '--json_path', type=str, help='alphapose detection result json path')
+    parser.add_argument('-j', '--keypoints_path', type=str, help='keyoints path')
     parser.add_argument('-v', '--vid_path', type=str, help='video path')
     parser.add_argument('-o', '--out_path', type=str, help='output path')
     parser.add_argument('--pixel', action='store_true', help='align with pixle coordinates')
@@ -35,7 +35,12 @@ if torch.cuda.is_available():
 
 print('Loading checkpoint', opts.evaluate)
 checkpoint = torch.load(opts.evaluate, map_location=lambda storage, loc: storage)
-model_backbone.load_state_dict(checkpoint['model_pos'], strict=True)
+
+#todo:
+state_dict = checkpoint['model_pos']
+state_dict = {k.partition('module.')[2]: v for k, v in state_dict.items() if k.startswith('module.')}
+
+model_backbone.load_state_dict(state_dict, strict=True)
 model_pos = model_backbone
 model_pos.eval()
 testloader_params = {
@@ -55,16 +60,17 @@ os.makedirs(opts.out_path, exist_ok=True)
 
 if opts.pixel:
     # Keep relative scale with pixel coornidates
-    wild_dataset = WildDetDataset(opts.json_path, clip_len=opts.clip_len, vid_size=vid_size, scale_range=None, focus=opts.focus)
+    wild_dataset = WildDetDataset(opts.keypoints_path, clip_len=opts.clip_len, vid_size=vid_size, scale_range=None, focus=opts.focus)
 else:
     # Scale to [-1,1]
-    wild_dataset = WildDetDataset(opts.json_path, clip_len=opts.clip_len, scale_range=[1,1], focus=opts.focus)
+    wild_dataset = WildDetDataset(opts.keypoints_path, clip_len=opts.clip_len, scale_range=[1,1], focus=opts.focus)
 
 test_loader = DataLoader(wild_dataset, **testloader_params)
 
 results_all = []
 with torch.no_grad():
     for batch_input in tqdm(test_loader):
+        print(batch_input.shape)
         N, T = batch_input.shape[:2]
         if torch.cuda.is_available():
             batch_input = batch_input.cuda()
@@ -79,9 +85,9 @@ with torch.no_grad():
         else:
             predicted_3d_pos = model_pos(batch_input)
         if args.rootrel:
-            predicted_3d_pos[:,:,0,:]=0                    # [N,T,17,3]
+            predicted_3d_pos[:,:,0,:] = 0                    # [N,T,17,3]
         else:
-            predicted_3d_pos[:,0,0,2]=0
+            predicted_3d_pos[:,0,0,2] = 0
             pass
         if args.gt_2d:
             predicted_3d_pos[...,:2] = batch_input[...,:2]
