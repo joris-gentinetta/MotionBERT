@@ -259,14 +259,21 @@ def motion2video_3d(motion, save_path, fps=25, keep_imgs = False):
     for f in tqdm(range(vlen)):
         j3d = motion[:,:,f]
         fig = plt.figure(0, figsize=(10, 10))
+        plt.imshow(original_frame)
+        vis_2d = get_img_from_fig(fig)
+        plt.close(fig)
+
+
+        fig = plt.figure(1, figsize=(10, 10))
+        j3d = motion[:, :, f]
         ax = plt.axes(projection="3d")
         ax.set_xlim(-512, 0)
         ax.set_ylim(-256, 256)
         ax.set_zlim(-512, 0)
-        # ax.set_xlabel('X')
-        # ax.set_ylabel('Y')
-        # ax.set_zlabel('Z')
-        ax.view_init(elev=12., azim=0)
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.view_init(elev=12., azim=90)
         plt.tick_params(left = False, right = False , labelleft = False ,
                         labelbottom = False, bottom = False)
         for i in range(len(joint_pairs)):
@@ -278,10 +285,21 @@ def motion2video_3d(motion, save_path, fps=25, keep_imgs = False):
                 ax.plot(-xs, -zs, -ys, color=color_right, lw=3, marker='o', markerfacecolor='w', markersize=3, markeredgewidth=2) # axis transformation for visualization
             else:
                 ax.plot(-xs, -zs, -ys, color=color_mid, lw=3, marker='o', markerfacecolor='w', markersize=3, markeredgewidth=2) # axis transformation for visualization
-            
-        frame_vis = get_img_from_fig(fig)
-        videowriter.append_data(frame_vis)
+        vis_3d = get_img_from_fig(fig)
+
+        ax.view_init(elev=12., azim=0)
+        vis_3d_0 = get_img_from_fig(fig)
         plt.close()
+        # pad vis_2d to match the size of vis_3d:
+        vis_2d = np.pad(vis_2d, ((0, max(0, vis_3d.shape[0] - vis_2d.shape[0])), (0, max(0, vis_3d.shape[1] - vis_2d.shape[1])), (0, 0)), mode='constant')
+        vis_3d = np.pad(vis_3d, ((0, max(0, vis_2d.shape[0] - vis_3d.shape[0])), (0, max(0, vis_2d.shape[1] - vis_3d.shape[1])), (0, 0)), mode='constant')
+        frame_vis = np.concatenate([vis_2d, vis_3d, vis_3d_0], axis=1)
+
+        # plt.imshow(frame_vis)
+        # plt.show()
+        # plt.close()
+        videowriter.append_data(frame_vis)
+
     videowriter.close()
 
 def motion2video_mesh(motion, save_path, fps=25, keep_imgs = False, draw_face=True):
